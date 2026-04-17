@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Driver Dashboard</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input, button { padding: 8px; margin: 5px 0; display: block; width: 100%; box-sizing: border-box;}
+        button { background-color: #28a745; border: none; color: white; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+    </style>
+</head>
+<body>
+    <a href="index.html">← Back to Home</a>
+    <h1>Driver Dashboard (Mock ID: 1)</h1>
+
+    <div class="card">
+        <h2>1. Publish a new Ride</h2>
+        <form id="pubForm">
+            <input type="text" id="src" placeholder="Source" required>
+            <input type="text" id="dest" placeholder="Destination" required>
+            <input type="datetime-local" id="time" required>
+            <input type="number" id="seats" placeholder="Seats Available" min="1" required>
+            <input type="number" step="0.01" id="fare" placeholder="Base Fare" required>
+            <button type="submit">Publish Ride</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>2. Manage & View Ride History</h2>
+        <button onclick="loadHistory()" style="background-color:#17a2b8;">Load My Rides</button>
+        <table id="historyTable">
+            <thead><tr><th>Ride ID</th><th>Route</th><th>Time</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        document.getElementById('pubForm').addEventListener('submit', e => {
+            e.preventDefault();
+            fetch(`/api/rides/publish?driverId=1&src=${document.getElementById('src').value}&dest=${document.getElementById('dest').value}&timeStr=${document.getElementById('time').value}&seats=${document.getElementById('seats').value}&fare=${document.getElementById('fare').value}`, {method: 'POST'})
+            .then(() => { alert('Ride Published'); loadHistory(); });
+        });
+
+        function loadHistory() {
+            fetch('/api/rides/driver/1/history')
+            .then(res => res.json())
+            .then(data => {
+                const tb = document.querySelector('#historyTable tbody');
+                tb.innerHTML = '';
+                data.forEach(r => {
+                    const btn = r.status === 'PUBLISHED' ? `<button onclick="completeRide(${r.id})">Mark Complete</button>` : 'COMPLETED';
+                    tb.innerHTML += `<tr><td>${r.id}</td><td>${r.source} -> ${r.destination}</td><td>${new Date(r.departureTime).toLocaleString()}</td><td>${r.status}</td><td>${btn}</td></tr>`;
+                });
+            });
+        }
+
+        function completeRide(id) {
+            fetch(`/api/rides/${id}/complete`, {method: 'POST'})
+            .then(res=>res.json())
+            .then(() => alert('Ride Completed!'))
+            .finally(() => loadHistory());
+        }
+        
+        // Load history on load
+        loadHistory();
+    </script>
+</body>
+</html>

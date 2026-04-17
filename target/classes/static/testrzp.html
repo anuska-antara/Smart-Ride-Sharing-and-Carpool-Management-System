@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+<button onclick="pay()">Pay</button>
+<script>
+function pay() {
+    var options = {
+        "key": "rzp_test_dummy",
+        "amount": "50000",
+        "name": "Test"
+    };
+    var rzp1 = new Razorpay(options);
+    rzp1.on('payment.failed', function (response){
+        alert(response.error.description);
+    });
+    rzp1.open();
+}
+</script>
+</body>
+</html>

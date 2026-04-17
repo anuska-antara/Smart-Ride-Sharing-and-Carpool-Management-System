@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Passenger Dashboard</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input, button { padding: 8px; margin: 5px 0; display: block; width: 100%; box-sizing: border-box;}
+        button { background-color: #007bff; border: none; color: white; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        .rate-box { background: #eee; padding: 10px; margin-top: 5px; }
+
+        /* Razorpay Styles */
+        #rzp-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        #rzp-box { background: #fff; width: 350px; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; }
+        .rzp-header { background: #528FF0; color: white; padding: 20px; text-align: center; position: relative;}
+
+        .rzp-header h3 { margin: 0 0 5px 0; font-size: 18px; font-weight: 500; }
+        .rzp-header p { margin: 0; font-size: 24px; font-weight: bold; }
+        .rzp-close { position: absolute; top: 10px; right: 15px; color: white; cursor: pointer; font-size: 20px; }
+        .rzp-body { padding: 20px; }
+        .rzp-body p { font-size: 14px; color: #555; margin-bottom: 15px; text-align: center; }
+        .rzp-input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .rzp-btn { width: 100%; background: #528FF0; color: white; border: none; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+        .rzp-btn:disabled { background: #9dbdf5; cursor: not-allowed; }
+        .rzp-footer { text-align: center; padding: 10px; font-size: 12px; color: #888; background: #f9f9f9; border-top: 1px solid #eee; margin: 0; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #528FF0; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .test-mode-badge { position: absolute; top: 10px; left: -30px; background: #ff4c4c; color: white; padding: 5px 30px; transform: rotate(-45deg); font-size: 10px; font-weight: bold; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+    <a href="index.html" style="text-decoration: none; color: #007bff; font-weight: bold;">← Back to Home</a>
+    <h1>Passenger Dashboard (ID: 2)</h1>
+
+    <div class="card">
+        <h2>1. Search Rides</h2>
+        <form id="searchForm">
+            <input type="text" id="src" placeholder="Source" required>
+            <input type="text" id="dest" placeholder="Destination" required>
+            <input type="number" id="seats" placeholder="Required Seats" value="1" min="1" required>
+            <button type="submit">Search</button>
+        </form>
+        <table id="searchTable">
+            <thead><tr><th>ID</th><th>Driver</th><th>Route</th><th>Seats</th><th>Price</th><th>Action</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>2. My Bookings & History</h2>
+        <button onclick="loadHistory()" style="background-color:#17a2b8; width: auto; padding: 10px 20px; margin-bottom: 10px;">Refresh Bookings</button>
+        <table id="historyTable">
+            <thead><tr><th>Booking ID</th><th>Ride Route</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- Razorpay Modal -->
+    <div id="rzp-overlay">
+        <div id="rzp-box">
+            <div class="rzp-header" style="overflow: hidden;">
+                <div class="test-mode-badge">TEST MODE</div>
+                <span class="rzp-close" onclick="closeMockPayment()">&times;</span>
+                <h3>Smart Carpool Technologies</h3>
+                <p id="rzp-amount">₹0.00</p>
+                <div style="font-size: 12px; margin-top: 5px; text-transform: uppercase; letter-spacing: 1px;">Razorpay Test Server</div>
+            </div>
+            <div class="rzp-body">
+                <p>Card/UPI Details</p>
+                <input type="text" class="rzp-input" value="alice@example.com" disabled>
+                <input type="text" class="rzp-input" placeholder="Card Number (Any 16 digits)" value="4111 1111 1111 1111">
+                <div class="loader" id="rzp-loader"></div>
+                <button class="rzp-btn" id="rzp-pay-btn" onclick="processMockPayment()">Pay Now</button>
+            </div>
+            <div class="rzp-footer">
+                &#128274; Secured locally for testing
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentBookingToPay = null;
+
+        document.getElementById('searchForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const seats = document.getElementById('seats').value;
+            const src = document.getElementById('src').value;
+            const dest = document.getElementById('dest').value;
+            fetch(`/api/rides/search?src=${src}&dest=${dest}&seats=${seats}`)
+            .then(res => res.json())
+            .then(data => {
+                const tb = document.querySelector('#searchTable tbody');
+                tb.innerHTML = '';
+                data.forEach(r => {
+                    const price = (r.baseFare * seats).toFixed(2);
+                    tb.innerHTML += `<tr>
+                        <td>${r.id}</td>
+                        <td>${r.driver.name}</td>
+                        <td>${r.source} &rarr; ${r.destination}</td>
+                        <td>${r.availableSeats}</td>
+                        <td>₹${price}</td>
+                        <td><button onclick="bookRide(${r.id}, ${seats})">Book</button></td>
+                    </tr>`;
+                });
+            });
+        });
+
+        // --- Simulated Razorpay Local Flow ---
+        function openPayment(bookingId, price) {
+            currentBookingToPay = bookingId;
+            document.getElementById('rzp-amount').innerText = '₹' + price;
+
+            document.getElementById('rzp-overlay').style.display = 'flex';
+        }
+
+        function closeMockPayment() {
+            document.getElementById('rzp-overlay').style.display = 'none';
+        }
+
+        function processMockPayment() {
+            if (!currentBookingToPay) return;
+            
+            const btn = document.getElementById('rzp-pay-btn');
+            const loader = document.getElementById('rzp-loader');
+            
+            btn.style.display = 'none';
+            loader.style.display = 'block';
+
+            // Simulate network delay
+            setTimeout(() => {
+                fetch(`/api/rides/booking/${currentBookingToPay}/pay`, { method: 'POST' })
+                .then(async res => {
+                    btn.style.display = 'block';
+                    loader.style.display = 'none';
+                    closeMockPayment();
+                    
+                    if (!res.ok) {
+                        const err = await res.text();
+                        alert('Payment failed on server: ' + err);
+                    } else {
+                        alert('✅ Payment Processed Successfully!');
+                        loadHistory();
+                    }
+                })
+                .catch(e => {
+                    btn.style.display = 'block';
+                    loader.style.display = 'none';
+                    alert('Error reaching server: ' + e);
+                });
+            }, 1000);
+        }
+        // ------------------------------------------
+
+        function bookRide(id, seats) {
+            fetch(`/api/rides/${id}/book?passengerId=2&seats=${seats}`, {method: 'POST'})
+            .then(()=> { alert('Booked successfully!'); loadHistory(); });
+        }
+
+        function loadHistory() {
+            fetch('/api/rides/passenger/2/history')
+            .then(res => res.json())
+            .then(data => {
+                const tb = document.querySelector('#historyTable tbody');
+                tb.innerHTML = '';
+                data.forEach(b => {
+                    let actionHtml = '';
+                    if(b.status === 'CONFIRMED' && b.ride.status === 'PUBLISHED') {
+                        actionHtml = `<button style="background:#dc3545" onclick="cancelRide(${b.id})">Cancel</button>`;
+                    } else if (b.status === 'CONFIRMED' && b.ride.status === 'COMPLETED') {
+                        if (!b.paid) {
+                            const price = (b.ride.baseFare * b.requestedSeats).toFixed(2);
+                            actionHtml = `<button onclick="openPayment(${b.id}, ${price})" style="background:#28a745">Pay ₹${price}</button>`;
+                        } else if (b.rating) {
+                            actionHtml = `<span style="color:#28a745; font-weight:bold;">Paid ✓</span><br>Rated: ${b.rating}★<br><i>"${b.review || ''}"</i>`;
+                        } else {
+                            actionHtml = `<div class="rate-box">
+                                <span style="color:#28a745; font-weight:bold; display:block; margin-bottom:5px;">Paid ✓</span>
+                                <input type="number" id="rate_${b.id}" min="1" max="5" placeholder="1-5 Stars">
+                                <input type="text" id="review_${b.id}" placeholder="Review (Optional)">
+                                <button onclick="submitRating(${b.id})">Submit Rating</button>
+                            </div>`;
+                        }
+                    } else {
+                        actionHtml = b.status;
+                    }
+                    
+                    tb.innerHTML += `<tr>
+                        <td>${b.id}</td>
+                        <td>${b.ride.source} &rarr; ${b.ride.destination}</td>
+                        <td>${b.status} (${b.ride.status})</td>
+                        <td>${actionHtml}</td>
+                    </tr>`;
+                });
+            });
+        }
+
+        function cancelRide(id) {
+            fetch(`/api/rides/booking/${id}/cancel`, {method: 'POST'})
+            .then(res=>res.json())
+            .then(()=> { alert('Canceled successfully!'); loadHistory(); });
+        }
+        
+        function submitRating(id) {
+            const r = document.getElementById(`rate_${id}`).value;
+            const rev = document.getElementById(`review_${id}`).value;
+            if(!r || r<1 || r>5) return alert("Enter valid 1-5 rating");
+            fetch(`/api/rides/booking/${id}/rate?rating=${r}&review=${rev}`, {method: 'POST'})
+            .then(async res=>{ 
+                if(!res.ok) throw new Error(await res.text());
+                alert('Rating submitted!'); loadHistory();
+            })
+            .catch(e => alert(e));
+        }
+
+        // load history initially
+        loadHistory();
+    </script>
+</body>
+</html>
